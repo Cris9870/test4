@@ -303,6 +303,21 @@ MAIL_FROM_NAME="Tienda Lab139"
 
 ---
 
+## 14. Subida de archivos / uploads (validado en lab139)
+
+- **`php artisan storage:link`** (Artisan tab, **una vez por app**) crea el symlink
+  `public/storage → storage/app/public`. **Sin él, los archivos subidos dan 404.**
+- Guarda en el disco `public`: `$request->file('imagen')->store('uploads', 'public')`; sirve con
+  `Storage::disk('public')->url($path)` → `https://dominio/storage/uploads/…`.
+- `storage/app/public` lo escribe `cmurillo` (usuario de PHP-FPM) → sin problemas de permisos.
+  Para archivos grandes, sube `upload_max_filesize` / `post_max_size` en **PHP Settings**.
+- Demo en el repo: **`/subir`** (formulario con preview por Alpine + galería) y **`/infra/upload-test`**
+  (diagnóstico JSON del symlink). Ver `UploadController`.
+- ✅ Certificado en lab139: POST real con CSRF (sesión `file`) → guardado → servido `200 image/png`
+  (de paso valida que **sesiones + CSRF** funcionan en Plesk).
+
+---
+
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
 | Síntoma | Causa | Arreglo |
@@ -316,6 +331,7 @@ MAIL_FROM_NAME="Tienda Lab139"
 | Toggle **Cola** no se activa (aun con paquete + scheduler) | quirk de UI del Toolkit | usar el **worker por scheduler** (§9 fallback) |
 | BD: **`password authentication failed`** | typo en el usuario, o `#`/`$`/`&` en la password sin entrecomillar (el `#` corta el valor) | revisa el user; password alfanumérica (o `'comillas simples'`) + `config:clear` |
 | `scout:import`: **"Model [...] not found"** (en el Toolkit) | la pestaña Artisan toma las comillas literales | **sin comillas**: `scout:import App\Models\Producto` |
+| Imagen subida da **404** | falta el symlink `public/storage` | `php artisan storage:link` (§14) |
 | Cambié `.env` y no surte efecto | config cacheada | Artisan → `optimize` |
 | Página en blanco / código fuente / 403 | Document Root no apunta a `public/` | §4 |
 | Assets/CSS 404 | `ASSET_URL`/`APP_URL` mal o `public/build` sin subir | fíjalos al dominio; versiona `public/build` |
