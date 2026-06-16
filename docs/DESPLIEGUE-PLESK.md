@@ -275,6 +275,34 @@ Sin namespacing, dos apps con el mismo índice/clave **se pisan los datos**.
 
 ---
 
+## 13. Email / SMTP (validado en lab139)
+
+Crea un buzón en Plesk (**Correo → Crear dirección de correo**) y configura en `.env` (Toolkit → Editar):
+
+```env
+MAIL_MAILER=smtp
+MAIL_SCHEME=smtps                                 # SSL (puerto 465). Para STARTTLS (587): MAIL_SCHEME=smtp
+MAIL_HOST=lab139.littlebigpro.com
+MAIL_PORT=465
+MAIL_USERNAME=test@lab139.littlebigpro.com
+MAIL_PASSWORD='<contraseña-del-buzon>'            # credencial EXTERNA -> NO la subas al repo público
+MAIL_FROM_ADDRESS=test@lab139.littlebigpro.com    # = el buzón autenticado
+MAIL_FROM_NAME="Tienda Lab139"
+```
+
+- **Puerto 465 → `MAIL_SCHEME=smtps`** (SSL implícito). Puerto **587 → `MAIL_SCHEME=smtp`** (STARTTLS).
+  Laravel 11+ usa **`MAIL_SCHEME`**, no `MAIL_ENCRYPTION`.
+- El **`FROM` debe ser el buzón autenticado** (los SMTP rechazan si no coincide).
+- Tras editar el `.env`: **Artisan → `optimize`**, luego **Artisan → `mail:test tucorreo@dominio.com`** (sin comillas).
+  `OK: enviado … sin excepcion` + el correo llega → ✅ **SMTP certificado** (probado en lab139).
+- El comando de prueba está en el repo: `app/Console/Commands/TestMail.php` (`mail:test {to}`).
+
+> 🔒 La password del buzón es una credencial **externa** (el SMTP es accesible desde Internet): a
+> diferencia de las claves de loopback (PG/Meili/Redis), **no conviene** ponerla en un repo público
+> (riesgo de abuso/spam). Va solo en el `.env` del server.
+
+---
+
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
 | Síntoma | Causa | Arreglo |
