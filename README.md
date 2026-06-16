@@ -6,6 +6,8 @@ y el flujo de despliegue **"compilo assets en el mini-server y subo a Plesk ya c
 
 > No es una tienda real: **sin carrito, sin pagos, sin auth, sin panel admin, sin colas/cron/Redis**.
 
+> **Estado: ✅ VALIDADO EN VIVO** en `https://lab138.littlebigpro.com` (Plesk, PHP-FPM 8.4) — PostgreSQL OK, Meilisearch OK, 31 productos, búsqueda con typos (`ipone`→iPhone, `labtop`→Laptop), facetas y detalle con Alpine. Smoke test reproducible: `bash deploy/verify.sh`.
+
 ## Stack
 
 | Pieza | Tecnología |
@@ -229,6 +231,27 @@ php artisan optimize
 
 Repite `config:cache` (o `php artisan config:clear`) **cada vez que cambies el `.env`** en el server;
 si no, Laravel seguirá usando la config cacheada anterior.
+
+### 2.7 ⚠️ Procedimiento REAL usado en lab138 (las deploy actions NO se dispararon solas)
+
+En este Plesk, el deploy de Git **solo hace `git pull`**: las *additional deployment actions* **no se ejecutaron** (ni en push automático ni con "Desplegar ahora"), y `composer`/`php` "pelados" no están en el PATH del deploy. El flujo fiable que **sí funcionó**:
+
+1. **Dependencias** → módulo **PHP Composer** de Plesk (botón **Instalar**). Corre con el entorno correcto y crea `vendor/` (sin él: 500 con cuerpo vacío).
+2. **Crear `.env`** (File Manager) en la raíz de la app. La `MEILISEARCH_KEY` debe ser la **master key real** del server: `grep master_key /etc/meilisearch.toml`.
+3. **Document Root → `…/public`** (la app se desplegó en la raíz del dominio, no en `httpdocs`).
+4. **Pasos artisan** con `deploy/deploy.sh`, ejecutado **como el usuario de la suscripción** (no root):
+
+   ```bash
+   # primer despliegue (siembra + indexa). APP=raiz de la app
+   su -s /bin/bash - cmurillo -c "bash $APP/deploy/deploy.sh --seed"
+   # despliegues siguientes (sin re-sembrar, para no duplicar)
+   su -s /bin/bash - cmurillo -c "bash $APP/deploy/deploy.sh"
+   ```
+
+   El script detecta el PHP de Plesk (`/opt/plesk/php/8.4/bin/php`), genera `APP_KEY` si falta, migra, sincroniza ajustes de índice y cachea. Ejecutarlo **como root rompe permisos** (PHP-FPM corre como el usuario de la suscripción).
+5. **Verificar**: `bash deploy/verify.sh https://lab138.littlebigpro.com`.
+
+> Gotchas vividos: `key:generate` falla con *"No APP_KEY variable was found"* (falta la línea) o *"APP_KEY is already present in the environment"* (línea `APP_KEY=` vacía) → el script escribe `APP_KEY=base64:…` directo. `migrate --seed` repetido **duplica** productos → re-sembrar solo con `migrate:fresh --seed` + `scout:flush`/`scout:import`.
 
 ---
 
