@@ -133,7 +133,9 @@ proyecto verás el código fuente o un 403/500 y `@vite`/rutas no funcionarán.
 
 `vendor/` y `node_modules/` están en `.gitignore`. Plesk trae **Composer integrado**.
 Configura las **acciones de despliegue** (Git → *Deployment actions*). Cada línea corre en un shell
-separado, así que **encadena con `&&`** lo que dependa de un mismo entorno:
+separado, así que **encadena con `&&`** lo que dependa de un mismo entorno.
+
+**Primer despliegue (one-time)** — incluye `key:generate`, `--seed` y `scout:import`:
 
 ```bash
 composer install --no-dev --optimize-autoloader \
@@ -144,8 +146,25 @@ composer install --no-dev --optimize-autoloader \
   && php artisan config:cache && php artisan route:cache && php artisan view:cache
 ```
 
-> `key:generate` solo es necesario si `APP_KEY` está vacío en el `.env` del servidor (puedes fijarlo a mano y quitar este paso).
-> `migrate --seed --force`: el `--force` es obligatorio en producción (entorno no interactivo).
+**Despliegues siguientes (recurrentes)** — **SIN `--seed` ni `scout:import`** (re-sembrar en
+cada push **duplicaría** los productos; reindexar completo es innecesario si los datos no cambian):
+
+```bash
+composer install --no-dev --optimize-autoloader \
+  && php artisan migrate --force \
+  && php artisan scout:sync-index-settings \
+  && php artisan config:cache && php artisan route:cache && php artisan view:cache
+```
+
+> `key:generate` solo en el primer despliegue (o fija `APP_KEY` a mano en `.env`). **No** lo dejes en
+> las acciones recurrentes: cambiaría la clave en cada push e invalidaría sesiones/cookies cifradas.
+> `--force` es obligatorio en producción (entorno no interactivo). `scout:sync-index-settings` es
+> idempotente; `scout:import` solo cuando cambie el catálogo.
+
+> **PATH/chroot**: si las acciones fallan con `php: command not found` o `composer: not found`, usa las
+> rutas completas de Plesk, p.ej. `/opt/plesk/php/8.3/bin/php artisan ...` y
+> `/opt/plesk/php/8.3/bin/php /usr/lib/plesk-9.0/composer.phar install ...`. Asegura también que el
+> acceso SSH del dominio sea `/bin/bash` (no *chrooted*).
 
 ### 2.3 `.env` (NO se sube al repo)
 
