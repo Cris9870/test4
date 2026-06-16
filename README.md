@@ -232,9 +232,9 @@ php artisan optimize
 Repite `config:cache` (o `php artisan config:clear`) **cada vez que cambies el `.env`** en el server;
 si no, Laravel seguirá usando la config cacheada anterior.
 
-### 2.7 ⚠️ Procedimiento REAL usado en lab138 (las deploy actions NO se dispararon solas)
+### 2.7 ⚠️ Procedimiento REAL usado en lab138 (lo que de verdad pasó)
 
-En este Plesk, el deploy de Git **solo hace `git pull`**: las *additional deployment actions* **no se ejecutaron** (ni en push automático ni con "Desplegar ahora"), y `composer`/`php` "pelados" no están en el PATH del deploy. El flujo fiable que **sí funcionó**:
+Aprendizaje clave: en este Plesk las *additional deployment actions* **SÍ se ejecutan en cada push/deploy**, pero `composer`/`php` "pelados" **no están en el PATH** del shell de deploy. Al principio parecía que "no corrían" porque **fallaban en el primer comando** (`composer install` / `php artisan key:generate` no encontrados, o sin `APP_KEY`/`vendor`) y el `&&` cortaba toda la cadena. Una vez resueltos `vendor/`, `APP_KEY` y la ruta de PHP, las actions corren enteras — y por eso **`migrate --seed` en las actions DUPLICA productos en cada push** (lo vimos: 31→62→93). El flujo fiable:
 
 1. **Dependencias** → módulo **PHP Composer** de Plesk (botón **Instalar**). Corre con el entorno correcto y crea `vendor/` (sin él: 500 con cuerpo vacío).
 2. **Crear `.env`** (File Manager) en la raíz de la app. La `MEILISEARCH_KEY` debe ser la **master key real** del server: `grep master_key /etc/meilisearch.toml`.
@@ -250,6 +250,14 @@ En este Plesk, el deploy de Git **solo hace `git pull`**: las *additional deploy
 
    El script detecta el PHP de Plesk (`/opt/plesk/php/8.4/bin/php`), genera `APP_KEY` si falta, migra, sincroniza ajustes de índice y cachea. Ejecutarlo **como root rompe permisos** (PHP-FPM corre como el usuario de la suscripción).
 5. **Verificar**: `bash deploy/verify.sh https://lab138.littlebigpro.com`.
+
+**Deployment actions seguras (recurrentes)** — déjalas así en Plesk para que cada push auto-despliegue **sin re-sembrar**:
+
+```bash
+/opt/plesk/php/8.4/bin/php artisan migrate --force && /opt/plesk/php/8.4/bin/php artisan scout:sync-index-settings && /opt/plesk/php/8.4/bin/php artisan optimize
+```
+
+> **NO** pongas `migrate --seed`, `scout:import` ni `key:generate` en las actions recurrentes: el seed duplica el catálogo en cada push, `scout:import` es innecesario y `key:generate --force` rotaría `APP_KEY` cada vez. La siembra/indexado inicial se hizo una vez con `deploy/deploy.sh --seed` (o `migrate:fresh --seed` + `scout:flush`/`scout:import` para limpiar duplicados).
 
 > Gotchas vividos: `key:generate` falla con *"No APP_KEY variable was found"* (falta la línea) o *"APP_KEY is already present in the environment"* (línea `APP_KEY=` vacía) → el script escribe `APP_KEY=base64:…` directo. `migrate --seed` repetido **duplica** productos → re-sembrar solo con `migrate:fresh --seed` + `scout:flush`/`scout:import`.
 
