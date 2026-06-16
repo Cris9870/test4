@@ -88,7 +88,14 @@ git add -A && git commit -m "deploy" && git push origin main
 
 ## 5. Base de datos PostgreSQL
 
-**Plesk → Databases → Add Database** (tipo **PostgreSQL**; prefijo `cmurillo_`). Valores de lab138:
+**Plesk → Databases → Add Database** (tipo **PostgreSQL**; prefijo `cmurillo_`).
+
+> 💡 **Usa una contraseña SOLO alfanumérica** (sin `# ! $ &`). En el `.env` esos caracteres rompen el
+> parseo (`#` inicia comentario, `$` interpola, …); si los usas, hay que entrecomillar con `'comillas
+> simples'`. Y revisa bien el **nombre de usuario** (Plesk lo prefija `cmurillo_`): un typo da
+> `password authentication failed`.
+
+Valores de lab138:
 
 ```
 DB:        cmurillo_testlaravel
@@ -158,18 +165,21 @@ solo vuelve a **Install/Update** cuando cambie `composer.json` (en la práctica,
 
 ## 8. Primer arranque (Toolkit → pestaña **Artisan**)
 
-Ejecuta estos comandos **uno a uno** desde la pestaña Artisan (corren como `cmurillo`, sin SSH):
+Ejecuta estos comandos **uno a uno** desde la pestaña Artisan (corren como `cmurillo`, sin SSH).
+⚠️ En la pestaña Artisan **NO se ponen comillas** en los argumentos (el Toolkit las toma literales):
 
 ```
 key:generate --force          # solo si APP_KEY está vacío
 migrate --seed --force        # crea tablas + siembra (UNA sola vez)
 scout:sync-index-settings     # facetas/synonyms/typo del indice
-scout:import "App\Models\Producto"
+scout:import App\Models\Producto      # SIN comillas (el Toolkit las toma literales)
 optimize                      # cachea config/rutas/vistas
 ```
 
-> ⚠️ `--seed` y `scout:import` son de **primer arranque**. NO los pongas en las deploy actions
-> recurrentes (§10) o duplicarás el catálogo en cada push.
+> ⚠️ Dos detalles que nos mordieron:
+> - **`scout:import "App\Models\Producto"`** con comillas → *"Model [...] not found"*. En el Toolkit va **sin comillas**: `scout:import App\Models\Producto`. (Por SSH/terminal sí van comillas.)
+> - `--seed` y `scout:import` son de **primer arranque**. NO los pongas en las deploy actions
+>   recurrentes (§10) o duplicarás el catálogo en cada push.
 
 ---
 
@@ -258,6 +268,8 @@ Sin namespacing, dos apps con el mismo índice/clave **se pisan los datos**.
 | Productos **duplicados** (31→62→93) | `migrate --seed` en deploy actions cada push | quitar `--seed` (§10) + `migrate:fresh --seed` para limpiar |
 | Otra app **pisa** tu índice/claves | servicios compartidos sin prefijo | `SCOUT_PREFIX` + `REDIS_PREFIX` (§12) |
 | Toggle **Cola** no se activa (aun con paquete + scheduler) | quirk de UI del Toolkit | usar el **worker por scheduler** (§9 fallback) |
+| BD: **`password authentication failed`** | typo en el usuario, o `#`/`$`/`&` en la password sin entrecomillar (el `#` corta el valor) | revisa el user; password alfanumérica (o `'comillas simples'`) + `config:clear` |
+| `scout:import`: **"Model [...] not found"** (en el Toolkit) | la pestaña Artisan toma las comillas literales | **sin comillas**: `scout:import App\Models\Producto` |
 | Cambié `.env` y no surte efecto | config cacheada | Artisan → `optimize` |
 | Página en blanco / código fuente / 403 | Document Root no apunta a `public/` | §4 |
 | Assets/CSS 404 | `ASSET_URL`/`APP_URL` mal o `public/build` sin subir | fíjalos al dominio; versiona `public/build` |
