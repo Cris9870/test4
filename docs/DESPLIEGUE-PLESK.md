@@ -318,6 +318,22 @@ MAIL_FROM_NAME="Tienda Lab139"
 
 ---
 
+## 15. Auth (a medida, SIN paquetes) — validado en lab139
+
+No hace falta Breeze/Jetstream: con las **primitivas del core** (`Auth::attempt/login/logout` + sesiones +
+middleware `guest`/`auth`) tienes registro/login/logout/ruta protegida. En el repo: `AuthController` +
+vistas `auth/login`, `auth/registro`, `cuenta`; rutas `registro` / `login` / `logout` / `cuenta`.
+
+- El modelo `User` hashea con el cast `'password' => 'hashed'` → en el registro se pasa la contraseña
+  **en claro** (NO uses `Hash::make`, doblaría el hash).
+- ✅ Certificado en lab139: registro→login automático, `/cuenta` **protegida** (redirige a `/login` sin
+  sesión), logout y re-login. Confirma **sesiones (`file`) + CSRF + hash** en Plesk.
+- ¿Más features? (verificación de email, reset de contraseña, 2FA) → Breeze/Fortify (opcional).
+  **Pagos** = pasarela externa (Stripe/PayPal/MercadoPago) + Cashier opcional; el dinero/tarjetas los
+  maneja el proveedor (PCI), tú integras el flujo carrito→checkout→webhook.
+
+---
+
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
 | Síntoma | Causa | Arreglo |
