@@ -110,8 +110,8 @@ setenv CACHE_STORE redis
 $PHP artisan optimize
 echo "--- prueba escribir/leer en Redis ---"
 $PHP artisan tinker --execute="Cache::put('redis_test_key','funciona',120); echo 'Cache::get => '.Cache::get('redis_test_key').PHP_EOL;"
-echo "--- claves en Redis con prefijo lab138_ ---"
-redis-cli -h 127.0.0.1 -p 6379 --scan --pattern 'lab138_*' | head -20
+echo "--- claves en Redis (cache = db 1) con prefijo lab138_ ---"
+redis-cli -n 1 -h 127.0.0.1 -p 6379 --scan --pattern 'lab138_*' | head -20
 echo "REDIS_OK"
 SCRIPT
 chmod a+rx /tmp/redis.sh
@@ -119,7 +119,9 @@ su -s /bin/bash - "$OWNER" -c "bash /tmp/redis.sh '$APP'"
 ```
 
 Esperado: `Cache::get => funciona` y al menos una clave `lab138_..._cache_redis_test_key` en el listado.
-(Nota: Laravel **ya namespacea Redis por `APP_NAME`** por defecto; el `REDIS_PREFIX` lo hace explícito.)
+(Nota: Laravel **ya namespacea Redis por `APP_NAME`** por defecto; el `REDIS_PREFIX` lo hace explícito.
+Además la **caché usa la DB 1** de Redis (`REDIS_CACHE_DB=1`), por eso el `--scan` lleva `-n 1`:
+doble aislamiento = prefijo + base de datos separada.)
 
 ---
 
