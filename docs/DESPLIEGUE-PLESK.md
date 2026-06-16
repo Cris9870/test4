@@ -21,9 +21,10 @@ síntomas→arreglo y todos los valores reales del servidor.
 7. **Instalar dependencias**: módulo **PHP Composer** → botón **Instalar** (crea `vendor/`).
 8. **Primer arranque** (1 comando por SSH root): genera APP_KEY + migra + siembra + indexa Meili + cachea.
 9. **Verificar**: `bash deploy/verify.sh https://TU-DOMINIO`.
-10. **Deploy actions seguras** (para los siguientes push, sin re-sembrar): ver §7.
+10. **Deploy actions seguras** (para los siguientes push, sin re-sembrar): ver §9.
 
 > Tiempo real: ~10 min si los servicios (PG/Meili) ya están en el server.
+> Meili y Redis son **compartidos** entre apps → el `.env` ya trae `SCOUT_PREFIX`/`REDIS_PREFIX` para aislar (ver §11).
 
 ---
 
@@ -120,11 +121,20 @@ DB_USERNAME=cmurillo_laravel
 DB_PASSWORD='E3&$8pOx7bngjhSe'
 
 SESSION_DRIVER=file
-CACHE_STORE=file
 QUEUE_CONNECTION=sync
+
+# Cache en Redis (el redis-server es COMPARTIDO) -> aislado con REDIS_PREFIX.
+# Requiere la extension phpredis en el PHP de Plesk (lab138 la tiene). Si no, usa CACHE_STORE=file.
+CACHE_STORE=redis
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PREFIX=lab138_
 
 SCOUT_DRIVER=meilisearch
 SCOUT_QUEUE=false
+# El Meilisearch es COMPARTIDO entre apps -> prefijo para que el indice sea "lab138_productos"
+SCOUT_PREFIX=lab138_
 MEILISEARCH_HOST=http://127.0.0.1:7700
 MEILISEARCH_KEY=9f1211b0f1a0a2c7baf7f1b400e3bc89d8982cf9c3bcfdef181b71a3fcfa5156
 ```
@@ -203,6 +213,29 @@ Comprueba HTTP 200 + PostgreSQL OK + Meilisearch OK + búsqueda con typos (`ipon
 
 ---
 
+## 11. ⚠️ Aislamiento multi-app (Meili y Redis son COMPARTIDOS)
+
+En este servidor **un solo Meilisearch y un solo Redis** sirven a varias apps (al desplegar lab138
+apareció un índice `anuncios` de otra app). Sin namespacing, dos apps con el mismo nombre de índice/clave
+**se pisan los datos**. Cada app debe diferenciarse:
+
+| Servicio | Mecanismo | En el `.env` | Resultado |
+|---|---|---|---|
+| **Meilisearch** | `SCOUT_PREFIX` | `SCOUT_PREFIX=lab138_` | índice `lab138_productos` (no choca con `anuncios`) |
+| **Redis** | `REDIS_PREFIX` (+ Laravel ya separa por `APP_NAME` y usa **db 1** para caché) | `REDIS_PREFIX=lab138_` | claves `lab138_*` en db 1 |
+
+- **Meili NO se autoprefija**: hay que poner `SCOUT_PREFIX`. Y el **modelo no debe sobreescribir
+  `searchableAs()`** con un nombre fijo (el default de Scout es `config('scout.prefix').getTable()`,
+  que respeta el prefijo). En este repo ya se quitó ese override.
+- **Redis SÍ se autoprefija** por `APP_NAME` (prefijo por defecto `slug(APP_NAME)_database_`) y la caché
+  va en la **db 1**; el `REDIS_PREFIX` explícito es un extra.
+- Comandos copia-pega para aplicar/verificar ambos: **`docs/comandos-mantenimiento.md`** (secciones 1 y 5).
+
+> Verificado en lab138: índices Meili = `anuncios` + `lab138_productos`; caché Redis `Cache::get => funciona`
+> con claves `lab138_*` en db 1.
+
+---
+
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
 | Síntoma | Causa real | Arreglo |
@@ -212,6 +245,8 @@ Comprueba HTTP 200 + PostgreSQL OK + Meilisearch OK + búsqueda con typos (`ipon
 | `key:generate`: **"No APP_KEY variable was found"** | el `.env` no tiene la línea `APP_KEY=` | añade `APP_KEY=` (o escríbela ya con valor) |
 | **"The provided API key is invalid"** (Meili) | `MEILISEARCH_KEY` del `.env` ≠ master key real | copiar de `grep master_key /etc/meilisearch.toml` |
 | Productos **duplicados** (31→62→93) | `migrate --seed` en deploy actions corre en cada push | quitar `--seed` de las actions (§9) + limpiar con `migrate:fresh --seed` |
+| Otra app **comparte/pisa** tu índice Meili o claves Redis | servicios compartidos sin namespacing | `SCOUT_PREFIX` + `REDIS_PREFIX` (§11) |
+| **"The provided API key is invalid"** tras un `config:clear` | la `MEILISEARCH_KEY` del `.env` no coincide; antes funcionaba por config cacheada | corregir la key desde `/etc/meilisearch.toml` + `optimize` |
 | **Página en blanco / código fuente / 403** | Document Root no apunta a `public/` | §4 |
 | Assets/CSS 404 | `ASSET_URL`/`APP_URL` mal, o `public/build` no subido | fijarlos al dominio; versionar `public/build` |
 | 500 **"Permission denied"** / *failed to open stream* | `storage/`/`bootstrap/cache` no escribibles o de root | correr artisan **como `cmurillo`**, no root; `chmod -R ug+rwX storage bootstrap/cache` |
