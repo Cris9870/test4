@@ -21,7 +21,19 @@
                 <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">🛍️</span>
                 {{ config('app.name') }}
             </a>
-            <span class="ml-auto text-xs text-slate-400">Laravel {{ app()->version() }} · Blade SSR · Meilisearch</span>
+            <nav class="ml-auto flex items-center gap-3 text-sm">
+                <span class="hidden text-xs text-slate-400 md:inline">Laravel {{ app()->version() }} · Blade SSR</span>
+                @auth
+                    <a href="{{ route('cuenta') }}" class="text-slate-600 hover:text-indigo-600">Mi cuenta</a>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button class="text-slate-500 hover:text-rose-600">Salir</button>
+                    </form>
+                @else
+                    <a href="{{ route('login') }}" class="text-slate-600 hover:text-indigo-600">Ingresar</a>
+                    <a href="{{ route('registro') }}" class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-700">Crear cuenta</a>
+                @endauth
+            </nav>
         </div>
     </header>
 

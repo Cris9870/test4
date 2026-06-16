@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BuscarController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InfraController;
@@ -25,3 +26,15 @@ Route::get('/infra/dispatch', [InfraController::class, 'dispatchJob']);
 Route::get('/subir', [UploadController::class, 'form'])->name('subir');
 Route::post('/subir', [UploadController::class, 'store']);
 Route::get('/infra/upload-test', [UploadController::class, 'test']);
+
+// Auth a medida (primitivas de Laravel, sin paquetes)
+Route::middleware('guest')->group(function () {
+    Route::get('/registro', [AuthController::class, 'showRegister'])->name('registro');
+    Route::post('/registro', [AuthController::class, 'register']);
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login']);
+});
+Route::middleware('auth')->group(function () {
+    Route::get('/cuenta', [AuthController::class, 'cuenta'])->name('cuenta');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+});
