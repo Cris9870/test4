@@ -1,93 +1,94 @@
-# 🚀 Guía de despliegue rápido — Laravel + Blade + PostgreSQL + Meilisearch en Plesk
+# 🚀 Guía de despliegue — Laravel en Plesk con el **Laravel Toolkit**
 
-Playbook **probado en vivo** (lab138.littlebigpro.com) para desplegar apps Laravel como esta
-en Plesk **sin estar debugueando**. Sigue el orden y copia-pega. Al final está la tabla de
-síntomas→arreglo y todos los valores reales del servidor.
+Playbook **probado en vivo** (lab138.littlebigpro.com) para desplegar apps Laravel
+(Blade + PostgreSQL + Meilisearch + Redis) en Plesk **sin debuguear**.
 
-> ⚙️ Filosofía del stack: **Plesk NO compila nada**. Los assets (Tailwind/Vite) se compilan en el
-> mini-server (`npm run build` → `public/build`, que **se versiona**). Plesk solo: clona el repo,
-> instala `vendor/` con Composer, y sirve PHP-FPM desde `public/`.
+> **Esta versión usa el Laravel Toolkit de Plesk como herramienta principal**: hace casi todo
+> desde el panel (Artisan, Composer, `.env`, Scheduler, Cola, Despliegue) **como el usuario de la
+> suscripción (`cmurillo`)** → permisos correctos y **sin SSH** para la mayoría de pasos.
+> El método manual por terminal queda como **Apéndice A** (fallback fiable).
 
----
-
-## ✅ TL;DR — checklist de despliegue (la primera vez)
-
-1. **Repo listo** en GitHub con `public/build` versionado (Plesk lo clona).
-2. **Plesk**: desactivar Node (si lo hubo) → **PHP 8.4 + FPM** (con `pdo_pgsql`).
-3. **Git** en Plesk: conectar repo, rama `main`, **deploy automático on push**.
-4. **Document Root → `…/<app>/public`** (NO la raíz; NO `httpdocs`).
-5. **Crear la BD PostgreSQL** en Plesk (lleva prefijo `cmurillo_`).
-6. **Crear `.env`** en la raíz de la app (File Manager) — bloque listo abajo.
-7. **Instalar dependencias**: módulo **PHP Composer** → botón **Instalar** (crea `vendor/`).
-8. **Primer arranque** (1 comando por SSH root): genera APP_KEY + migra + siembra + indexa Meili + cachea.
-9. **Verificar**: `bash deploy/verify.sh https://TU-DOMINIO`.
-10. **Deploy actions seguras** (para los siguientes push, sin re-sembrar): ver §9.
-
-> Tiempo real: ~10 min si los servicios (PG/Meili) ya están en el server.
-> Meili y Redis son **compartidos** entre apps → el `.env` ya trae `SCOUT_PREFIX`/`REDIS_PREFIX` para aislar (ver §11).
+> ⚙️ Filosofía del stack: **Plesk NO compila nada**. Tailwind/Vite se compilan en el mini-server
+> (`npm run build` → `public/build`, que **se versiona**). Plesk clona el repo, instala `vendor/`
+> con Composer y sirve PHP-FPM desde `public/`.
 
 ---
 
-## 0. Arquitectura del entorno (una vez por servidor)
+## 0. El Laravel Toolkit = tu centro de mando
 
-| Pieza | Dónde | Detalle |
-|---|---|---|
-| Servidor | `vmi725081` (Ubuntu 22, Plesk) | acceso `root@` por SSH |
-| PHP | `/opt/plesk/php/8.4/bin/php` | FPM, con `pdo_pgsql` activo |
-| Composer (Plesk) | módulo **PHP Composer** (botón Instalar) | los binarios `composer`/`php` **NO están en el PATH** del deploy |
-| PostgreSQL | `127.0.0.1:5432` | Plesk gestiona; **prefija** db/usuario con `cmurillo_` |
-| Meilisearch | `127.0.0.1:7700` (systemd) | master key en `/etc/meilisearch.toml` |
-| Usuario suscripción | `cmurillo` | dueño de los archivos; PHP-FPM corre como él |
+Plesk → **Sitios web y dominios → (tu dominio) → Laravel Toolkit**. Lo que ofrece:
 
-**Regla de oro**: los comandos `artisan`/`composer` se ejecutan **como `cmurillo`, NUNCA como root**
-(si los corres como root, los archivos quedan de root y PHP-FPM no puede escribir → 500 por permisos).
+| Control | Para qué |
+|---|---|
+| Pestaña **Artisan** | ejecutar cualquier `php artisan …` desde el panel |
+| Pestaña **Composer** | `composer install/update` (crea/actualiza `vendor/`) |
+| Pestaña **Despliegue** | deploy por Git + acciones de despliegue |
+| Pestaña **Cola** | opciones del worker de cola (timeout, nº trabajos…) |
+| Pestaña **Node.js** | no la necesitas (assets precompilados) |
+| Botón **Editar** (Variables de entorno) | editor del `.env` |
+| Toggle **Tareas programadas** | activa el Scheduler de Laravel (`schedule:run` cada minuto) |
+| Toggle **Cola** | activa el worker de cola (requiere paquete, ver §9) |
+| Toggle **Modo de mantenimiento** | `artisan down/up` |
+
+> 🔑 **Regla de oro**: todo lo del Toolkit corre como **`cmurillo`** (no root) → cero problemas de
+> permisos. Si en algún momento usas el método manual (Apéndice A), **ejecuta artisan como `cmurillo`,
+> nunca como root** (si no, los archivos quedan de root y PHP-FPM da 500 por permisos).
 
 ---
 
-## 1. Preparar el repo (en el mini-server, antes de subir)
+## ✅ TL;DR — checklist (la primera vez)
+
+1. **Repo** en GitHub con `public/build` versionado.
+2. **Plesk**: PHP **8.4 + FPM** (con `pdo_pgsql`); si venía de Node, **Disable Node.js**.
+3. **Git/Despliegue** (Toolkit): repo, rama `main`, **deploy automático on push**.
+4. **Document Root → `…/<app>/public`** (NO la raíz, NO `httpdocs`).
+5. **Crear BD PostgreSQL** en Plesk (lleva prefijo `cmurillo_`).
+6. **`.env`** → Toolkit **Editar** (bloque en §6).
+7. **Composer** → Toolkit pestaña **Composer → Install** (crea `vendor/`).
+8. **Primer arranque** → Toolkit pestaña **Artisan**: `key:generate`, `migrate --seed`, `scout:*`, `optimize`.
+9. **Scheduler + Cola** → toggles (§9).
+10. **Verificar** (§11) y dejar las **deploy actions seguras** (§10).
+
+> Meili y Redis son **compartidos** entre apps → el `.env` ya trae `SCOUT_PREFIX`/`REDIS_PREFIX` (ver §12).
+
+---
+
+## 1. Preparar el repo (mini-server)
 
 ```bash
 npm install && npm run build          # genera public/build (se VERSIONA)
 git add -A && git commit -m "deploy" && git push origin main
 ```
 
-`.gitignore` debe **excluir** `vendor/`, `node_modules/`, `.env` y **NO** excluir `public/build`
-(en este repo `public/build` está comentado en `.gitignore` a propósito).
+`.gitignore` debe **excluir** `vendor/`, `node_modules/`, `.env` y **NO** excluir `public/build`.
 
 ---
 
 ## 2. Plesk: hosting PHP
 
-1. Si el dominio venía de Node: **Node.js → Disable Node.js**.
-2. **PHP Settings → PHP 8.4** + **FPM**. Verifica que `phpinfo()` muestre **`pdo_pgsql`**
-   (si falta, actívalo en el componente PHP; es el driver de PostgreSQL — error nº1 silencioso).
+- Si venía de Node: **Node.js → Disable Node.js**.
+- **PHP Settings → PHP 8.4 + FPM**. Confirma `pdo_pgsql` en `phpinfo()` (driver de PostgreSQL — error nº1 silencioso).
 
 ---
 
-## 3. Git en Plesk
+## 3. Despliegue por Git (Toolkit pestaña **Despliegue**, o Git)
 
-- **Websites & Domains → Git** → conecta `https://github.com/Cris9870/test` (o tu repo), rama **`main`**.
-- Modo **automático** (deploy en cada push).
-- ⚠️ **Las "deployment actions" SÍ se ejecutan en cada push** (ver §7). No las pongas mal o duplicarás datos.
+- Conecta el repo (`https://github.com/Cris9870/test` o el tuyo), rama **`main`**, modo **automático**.
+- Las acciones de despliegue **SÍ corren en cada push** (deja las seguras de §10).
 
 ---
 
 ## 4. Document Root = `public/`
 
-**Hosting Settings → Document root** → apúntalo a la carpeta `public` **dentro de la raíz desplegada**.
-
-- En lab138 la app se desplegó en la **raíz del dominio** (no en `httpdocs`):
-  `…/lab138.littlebigpro.com` → docroot = `…/lab138.littlebigpro.com/public`.
-- Borra cualquier `index.html` placeholder del docroot.
-- ✅ Comprobación: `https://TU-DOMINIO/build/manifest.json` debe dar **200** (sirve estáticos desde `public/`).
+**Hosting Settings → Document root** → la carpeta `public` **dentro de la raíz desplegada**
+(p.ej. `…/lab138.littlebigpro.com/public`). Borra cualquier `index.html` placeholder.
+✅ Check: `https://TU-DOMINIO/build/manifest.json` debe dar **200**.
 
 ---
 
 ## 5. Base de datos PostgreSQL
 
-**Plesk → Databases → Add Database** (tipo **PostgreSQL**). Plesk prefija con `cmurillo_`.
-
-Valores usados en lab138:
+**Plesk → Databases → Add Database** (tipo **PostgreSQL**; prefijo `cmurillo_`). Valores de lab138:
 
 ```
 DB:        cmurillo_testlaravel
@@ -98,9 +99,7 @@ Host/Port: 127.0.0.1 : 5432
 
 ---
 
-## 6. Crear el `.env` (File Manager, en la raíz de la app)
-
-Pega esto tal cual (valores reales de lab138). `APP_KEY` se rellena en el §8:
+## 6. `.env` (Toolkit → **Editar**)
 
 ```env
 APP_NAME="Tienda Test"
@@ -121,10 +120,10 @@ DB_USERNAME=cmurillo_laravel
 DB_PASSWORD='E3&$8pOx7bngjhSe'
 
 SESSION_DRIVER=file
-QUEUE_CONNECTION=sync
+# Cola en Redis (necesario para que el worker procese; sync NO usa worker)
+QUEUE_CONNECTION=redis
 
-# Cache en Redis (el redis-server es COMPARTIDO) -> aislado con REDIS_PREFIX.
-# Requiere la extension phpredis en el PHP de Plesk (lab138 la tiene). Si no, usa CACHE_STORE=file.
+# Cache en Redis (COMPARTIDO) -> aislado con REDIS_PREFIX. Requiere phpredis (lab138 lo tiene).
 CACHE_STORE=redis
 REDIS_CLIENT=phpredis
 REDIS_HOST=127.0.0.1
@@ -133,139 +132,136 @@ REDIS_PREFIX=lab138_
 
 SCOUT_DRIVER=meilisearch
 SCOUT_QUEUE=false
-# El Meilisearch es COMPARTIDO entre apps -> prefijo para que el indice sea "lab138_productos"
+# Meilisearch COMPARTIDO -> prefijo: el indice sera "lab138_productos"
 SCOUT_PREFIX=lab138_
 MEILISEARCH_HOST=http://127.0.0.1:7700
 MEILISEARCH_KEY=9f1211b0f1a0a2c7baf7f1b400e3bc89d8982cf9c3bcfdef181b71a3fcfa5156
 ```
 
-> 🔑 **Dos claves distintas, no las confundas:**
-> - **`APP_KEY`** = clave de cifrado de Laravel (cookies/sesiones). Si falta → *"No application encryption key has been specified"*. Se genera (§8).
-> - **`MEILISEARCH_KEY`** = **master key de Meilisearch** (autentica a `127.0.0.1:7700`). Si está mal → *"The provided API key is invalid"*. **Fuente autoritativa**: `grep master_key /etc/meilisearch.toml`.
+> 🔑 **Dos claves distintas**: `APP_KEY` (cifrado de Laravel; falta → *"No application encryption key"*) y
+> `MEILISEARCH_KEY` (master key de Meili; mal → *"The provided API key is invalid"*, sácala de
+> `grep master_key /etc/meilisearch.toml`). La password de BD va **entre comillas simples** (tiene `&` y `$`).
 >
-> La password de la BD va **entre comillas simples** porque tiene `&` y `$` (si no, Laravel la malinterpreta).
+> ⚠️ Tras editar el `.env`, **re-cachea** (Artisan → `optimize`) o no surte efecto (config cacheada).
 
 ---
 
-## 7. Dependencias (Composer)
+## 7. Dependencias (Toolkit → pestaña **Composer** → Install)
 
-`vendor/` **no está en Git** y **no se reinstala solo** en cada push (los binarios de composer no están
-en el PATH del deploy). Instálalo con el **módulo de Plesk**:
+Crea `vendor/` con el entorno correcto. `vendor/` **persiste** entre despliegues (git pull no lo toca);
+solo vuelve a **Install/Update** cuando cambie `composer.json` (en la práctica, casi nunca).
 
-- **Websites & Domains → PHP Composer → botón “Instalar”**. Crea `vendor/` con el entorno correcto.
-- `vendor/` **persiste** entre despliegues (git pull no lo toca). Solo vuelve a **Instalar/Actualizar**
-  cuando cambies `composer.json`/`composer.lock`. En la práctica, **casi nunca**.
-
-> Sin `vendor/` la web da **500 con cuerpo vacío** (Laravel ni arranca).
+> Sin `vendor/` → la web da **500 con cuerpo vacío** (Laravel ni arranca).
+> `composer install` **NO** corre solo en el deploy → por eso se usa esta pestaña.
 
 ---
 
-## 8. Primer arranque (1 comando, SSH como root)
+## 8. Primer arranque (Toolkit → pestaña **Artisan**)
 
-Genera `APP_KEY`, migra, **siembra una sola vez**, indexa Meili y cachea — **ejecutado como `cmurillo`**.
-Cambia `DOMAIN` si despliegas otro dominio:
+Ejecuta estos comandos **uno a uno** desde la pestaña Artisan (corren como `cmurillo`, sin SSH):
 
-```bash
-DOMAIN=lab138.littlebigpro.com
-ART=$(find /var/www/vhosts/*/$DOMAIN -maxdepth 2 -name artisan -type f 2>/dev/null | head -1); APP=$(dirname "$ART"); PHP=/opt/plesk/php/8.4/bin/php; OWNER=$(stat -c '%U' "$ART"); echo ">> APP=$APP PHP=$PHP OWNER=$OWNER"; su -s /bin/bash - "$OWNER" -c "cd '$APP' && ( grep -q '^APP_KEY=base64:' .env || { sed -i '/^APP_KEY=/d' .env; echo \"APP_KEY=base64:\$(openssl rand -base64 32)\" >> .env; } ) && '$PHP' artisan migrate --force && '$PHP' artisan db:seed --force && '$PHP' artisan scout:sync-index-settings && '$PHP' artisan scout:flush 'App\\Models\\Producto' && '$PHP' artisan scout:import 'App\\Models\\Producto' && '$PHP' artisan optimize && echo PRIMER_DEPLOY_OK"
+```
+key:generate --force          # solo si APP_KEY está vacío
+migrate --seed --force        # crea tablas + siembra (UNA sola vez)
+scout:sync-index-settings     # facetas/synonyms/typo del indice
+scout:import "App\Models\Producto"
+optimize                      # cachea config/rutas/vistas
 ```
 
-Deberías ver: `Application key set`/clave ya presente → migraciones `DONE` → seeder → `Imported … up to ID: 31` → `… cached` → `PRIMER_DEPLOY_OK`.
-
-> Si más adelante **se duplicaron** los productos (p.ej. 31→62 por sembrar de más), límpialo con `migrate:fresh`:
-> ```bash
-> su -s /bin/bash - "$OWNER" -c "cd '$APP' && '$PHP' artisan migrate:fresh --seed --force && '$PHP' artisan scout:flush 'App\\Models\\Producto' && '$PHP' artisan scout:import 'App\\Models\\Producto' && '$PHP' artisan optimize"
-> ```
+> ⚠️ `--seed` y `scout:import` son de **primer arranque**. NO los pongas en las deploy actions
+> recurrentes (§10) o duplicarás el catálogo en cada push.
 
 ---
 
-## 9. Deploy actions para los SIGUIENTES push (Plesk → Git → acciones de despliegue)
+## 9. Scheduler + Cola (toggles del Toolkit)
 
-Pega **solo esto** (con ruta completa de PHP, **SIN `--seed`, `scout:import` ni `key:generate`**):
+### Scheduler → toggle **Tareas programadas = Activado**
+Plesk crea el cron de `schedule:run` (cada minuto). Listo. ✅ Verificado en lab138.
+
+### Cola → requiere paquete + toggle
+1. Añade al `composer.json` el paquete de integración: **`plesk/ext-laravel-integration`**
+   (`composer require plesk/ext-laravel-integration`, luego Toolkit → Composer → Install).
+2. Toggle **Tareas programadas** activo (la cola depende de él).
+3. Pestaña **Cola** → "Detener trabajo cuando esté vacío" **desmarcado** (worker persistente), tiempos a **0**.
+4. Toggle **Cola = Activado**.
+
+> ⚠️ **Quirk vivido en lab138**: el toggle **Cola** no se dejó activar ni con el paquete instalado ni con
+> el scheduler activo (mensajes que cambiaban solos: *"instale el paquete"* → *"active el trabajo de cola"*).
+> Parece un **bug de la UI de Plesk**, no de la app.
+>
+> **Fallback fiable (el que usamos): worker movido por el Scheduler.** Ya está en el repo,
+> `routes/console.php`:
+> ```php
+> Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3')
+>     ->everyMinute()->withoutOverlapping(5);
+> ```
+> Con el toggle **Tareas programadas** activo y `QUEUE_CONNECTION=redis`, el scheduler ejecuta el worker
+> cada minuto: procesa lo encolado y sale. **Latencia ~1 min** (vs. instantáneo del toggle Cola), pero
+> 100% fiable y sin depender del toggle. ✅ Certificado en lab138 (job procesado end-to-end).
+
+---
+
+## 10. Deploy actions recurrentes (Despliegue/Git → acciones)
+
+Para los SIGUIENTES push (con ruta completa de PHP, **sin** seed/import/key:generate):
 
 ```bash
 /opt/plesk/php/8.4/bin/php artisan migrate --force && /opt/plesk/php/8.4/bin/php artisan scout:sync-index-settings && /opt/plesk/php/8.4/bin/php artisan optimize
 ```
 
-Por qué exactamente esto:
-- **SÍ corren en cada push** → automatizan migraciones nuevas + caché. ✅
-- **`--seed` NO** → si no, **duplica el catálogo en cada push** (lo vivimos: 31→62→93). ❌
-- **`scout:import` NO** → innecesario salvo que cambie el catálogo. ❌
-- **`key:generate` NO** → rotaría `APP_KEY` en cada push e invalidaría sesiones. ❌
-- **`composer install` NO** → se hace con el módulo Composer (§7) cuando cambian deps.
-
-> ¿Quieres composer automático también? Es posible con la ruta completa del phar
-> (`/opt/plesk/php/8.4/bin/php /usr/lib/plesk-*/composer.phar install --no-dev --optimize-autoloader && …`),
-> pero corre en cada push (unos segundos extra). Opcional.
-
-Tras cada push normal: `git pull` (automático) + estas 3 acciones. `vendor/` y `public/build` ya están.
+- `--seed`/`scout:import`/`key:generate` **NO** aquí (duplican datos / rotan la clave).
+- `composer install` **NO** aquí → se hace por la pestaña Composer cuando cambian deps.
 
 ---
 
-## 10. Verificar (smoke test reproducible)
+## 11. Verificar
 
 ```bash
 bash deploy/verify.sh https://lab138.littlebigpro.com
 ```
 
-Comprueba HTTP 200 + PostgreSQL OK + Meilisearch OK + búsqueda con typos (`ipone`→iPhone,
-`labtop`→Laptop) + faceta + detalle. Si todo va: `== TODO OK ==`.
+Comprueba 200 + PostgreSQL OK + Meilisearch OK + typos (`ipone`→iPhone, `labtop`→Laptop) + faceta + detalle.
+
+**Cola + Scheduler** (endpoints de diagnóstico de ESTA app de test):
+- `GET /infra` → JSON con `queue_connection`, `cache_store`, `scheduler_last_run`, `queue_last_job`.
+- `GET /infra/dispatch` → encola un `PingJob` (duerme 3s). Con `redis` la respuesta es **instantánea**
+  (job a Redis) y `queue_last_job` aparece cuando el **worker** lo procesa.
+- **Scheduler OK** si `scheduler_last_run` se actualiza cada minuto. **Cola OK** si tras `/infra/dispatch`
+  el `queue_last_job` toma el token despachado.
 
 ---
 
-## 11. ⚠️ Aislamiento multi-app (Meili y Redis son COMPARTIDOS)
+## 12. ⚠️ Aislamiento multi-app (Meili y Redis son COMPARTIDOS)
 
-En este servidor **un solo Meilisearch y un solo Redis** sirven a varias apps (al desplegar lab138
-apareció un índice `anuncios` de otra app). Sin namespacing, dos apps con el mismo nombre de índice/clave
-**se pisan los datos**. Cada app debe diferenciarse:
+Un solo Meilisearch y un solo Redis sirven a varias apps (en lab138 apareció un índice `anuncios` de otra app).
+Sin namespacing, dos apps con el mismo índice/clave **se pisan los datos**.
 
-| Servicio | Mecanismo | En el `.env` | Resultado |
+| Servicio | Mecanismo | `.env` | Resultado |
 |---|---|---|---|
-| **Meilisearch** | `SCOUT_PREFIX` | `SCOUT_PREFIX=lab138_` | índice `lab138_productos` (no choca con `anuncios`) |
-| **Redis** | `REDIS_PREFIX` (+ Laravel ya separa por `APP_NAME` y usa **db 1** para caché) | `REDIS_PREFIX=lab138_` | claves `lab138_*` en db 1 |
+| **Meilisearch** | `SCOUT_PREFIX` | `SCOUT_PREFIX=lab138_` | índice `lab138_productos` |
+| **Redis** | `REDIS_PREFIX` (+ Laravel ya separa por `APP_NAME`; caché en **db 1**) | `REDIS_PREFIX=lab138_` | claves `lab138_*` |
 
-- **Meili NO se autoprefija**: hay que poner `SCOUT_PREFIX`. Y el **modelo no debe sobreescribir
-  `searchableAs()`** con un nombre fijo (el default de Scout es `config('scout.prefix').getTable()`,
-  que respeta el prefijo). En este repo ya se quitó ese override.
-- **Redis SÍ se autoprefija** por `APP_NAME` (prefijo por defecto `slug(APP_NAME)_database_`) y la caché
-  va en la **db 1**; el `REDIS_PREFIX` explícito es un extra.
-- Comandos copia-pega para aplicar/verificar ambos: **`docs/comandos-mantenimiento.md`** (secciones 1 y 5).
-
-> Verificado en lab138: índices Meili = `anuncios` + `lab138_productos`; caché Redis `Cache::get => funciona`
-> con claves `lab138_*` en db 1.
+- **Meili NO se autoprefija** → pon `SCOUT_PREFIX` y **no sobreescribas `searchableAs()`** con un nombre
+  fijo (el default `config('scout.prefix').getTable()` respeta el prefijo). En este repo ya se quitó el override.
+- **Redis SÍ se autoprefija** por `APP_NAME` y la caché va en **db 1**; el `REDIS_PREFIX` es un extra.
 
 ---
 
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
-| Síntoma | Causa real | Arreglo |
+| Síntoma | Causa | Arreglo |
 |---|---|---|
-| **500 con cuerpo vacío** (`len=0`), PHP ejecuta | falta `vendor/` (composer no corrió) | módulo PHP Composer → **Instalar** (§7) |
-| 500 con texto **"No application encryption key"** | falta/empty `APP_KEY` | generar APP_KEY (§8). Si `key:generate` dice *"already present in the environment"* = había línea `APP_KEY=` vacía → bórrala y escribe `APP_KEY=base64:…` directo |
-| `key:generate`: **"No APP_KEY variable was found"** | el `.env` no tiene la línea `APP_KEY=` | añade `APP_KEY=` (o escríbela ya con valor) |
-| **"The provided API key is invalid"** (Meili) | `MEILISEARCH_KEY` del `.env` ≠ master key real | copiar de `grep master_key /etc/meilisearch.toml` |
-| Productos **duplicados** (31→62→93) | `migrate --seed` en deploy actions corre en cada push | quitar `--seed` de las actions (§9) + limpiar con `migrate:fresh --seed` |
-| Otra app **comparte/pisa** tu índice Meili o claves Redis | servicios compartidos sin namespacing | `SCOUT_PREFIX` + `REDIS_PREFIX` (§11) |
-| **"The provided API key is invalid"** tras un `config:clear` | la `MEILISEARCH_KEY` del `.env` no coincide; antes funcionaba por config cacheada | corregir la key desde `/etc/meilisearch.toml` + `optimize` |
-| **Página en blanco / código fuente / 403** | Document Root no apunta a `public/` | §4 |
-| Assets/CSS 404 | `ASSET_URL`/`APP_URL` mal, o `public/build` no subido | fijarlos al dominio; versionar `public/build` |
-| 500 **"Permission denied"** / *failed to open stream* | `storage/`/`bootstrap/cache` no escribibles o de root | correr artisan **como `cmurillo`**, no root; `chmod -R ug+rwX storage bootstrap/cache` |
-| Cambié `.env` y no surte efecto | config cacheada | `php artisan optimize` (o `config:clear`) |
-| `composer: command not found` en deploy actions | binarios no están en PATH del deploy | usar el módulo Composer, o rutas completas |
-| `php: command not found` en deploy actions | idem | usar `/opt/plesk/php/8.4/bin/php` (ruta absoluta) |
-
----
-
-## 🧰 Plantilla de comando "correr cualquier artisan" (como el usuario correcto)
-
-```bash
-DOMAIN=lab138.littlebigpro.com
-ART=$(find /var/www/vhosts/*/$DOMAIN -maxdepth 2 -name artisan -type f 2>/dev/null | head -1); APP=$(dirname "$ART"); PHP=/opt/plesk/php/8.4/bin/php; OWNER=$(stat -c '%U' "$ART")
-su -s /bin/bash - "$OWNER" -c "cd '$APP' && '$PHP' artisan <LO-QUE-SEA>"
-```
-
-Ejemplos de `<LO-QUE-SEA>`: `migrate --force` · `optimize` · `scout:import 'App\Models\Producto'` ·
-`config:clear` · `tinker` · `about`.
+| **500 con cuerpo vacío**, PHP ejecuta | falta `vendor/` | Toolkit → Composer → **Install** |
+| 500 **"No application encryption key"** | falta/empty `APP_KEY` | Artisan → `key:generate --force`. Si dice *"already present in the environment"* = línea `APP_KEY=` vacía → bórrala/pon valor |
+| `key:generate`: *"No APP_KEY variable was found"* | el `.env` no tiene la línea `APP_KEY=` | añade `APP_KEY=` |
+| **"The provided API key is invalid"** (Meili) | `MEILISEARCH_KEY` ≠ master key real | `grep master_key /etc/meilisearch.toml` → corrige + `optimize` |
+| Productos **duplicados** (31→62→93) | `migrate --seed` en deploy actions cada push | quitar `--seed` (§10) + `migrate:fresh --seed` para limpiar |
+| Otra app **pisa** tu índice/claves | servicios compartidos sin prefijo | `SCOUT_PREFIX` + `REDIS_PREFIX` (§12) |
+| Toggle **Cola** no se activa (aun con paquete + scheduler) | quirk de UI del Toolkit | usar el **worker por scheduler** (§9 fallback) |
+| Cambié `.env` y no surte efecto | config cacheada | Artisan → `optimize` |
+| Página en blanco / código fuente / 403 | Document Root no apunta a `public/` | §4 |
+| Assets/CSS 404 | `ASSET_URL`/`APP_URL` mal o `public/build` sin subir | fíjalos al dominio; versiona `public/build` |
+| 500 *Permission denied* | artisan corrido como **root** | usar el Toolkit (corre como `cmurillo`) o `su - cmurillo` |
 
 ---
 
@@ -280,12 +276,10 @@ PHP:               /opt/plesk/php/8.4/bin/php
 Repo:              github.com/Cris9870/test  (rama main = Laravel)
 URL:               https://lab138.littlebigpro.com
 
-PostgreSQL:        127.0.0.1:5432
-  db / user / pass: cmurillo_testlaravel / cmurillo_laravel / E3&$8pOx7bngjhSe
-
-Meilisearch:       http://127.0.0.1:7700
-  master key:      9f1211b0f1a0a2c7baf7f1b400e3bc89d8982cf9c3bcfdef181b71a3fcfa5156
-  (fuente:         /etc/meilisearch.toml)
+PostgreSQL:  127.0.0.1:5432 — cmurillo_testlaravel / cmurillo_laravel / E3&$8pOx7bngjhSe
+Meilisearch: http://127.0.0.1:7700 — master key en /etc/meilisearch.toml
+             (9f1211b0f1a0a2c7baf7f1b400e3bc89d8982cf9c3bcfdef181b71a3fcfa5156)
+Redis:       127.0.0.1:6379 — phpredis disponible; caché en db 1
 ```
 
 ---
@@ -294,9 +288,30 @@ Meilisearch:       http://127.0.0.1:7700
 
 | Acción | ¿Qué tocas? |
 |---|---|
-| Cambias código/vistas/rutas | solo `git push` (auto: pull + migrate + scout:sync + optimize) |
+| Cambias código/vistas/rutas | solo `git push` (auto: migrate + scout:sync + optimize) |
 | Cambias migraciones | `git push` (migrate corre solo) |
-| Cambias el catálogo/seeder | `git push` + correr `scout:import` una vez (§plantilla) |
-| Cambias dependencias (`composer.json`) | módulo PHP Composer → **Actualizar** |
-| Cambias `.env` | editar `.env` + `php artisan optimize` |
-| Compilas estilos nuevos | `npm run build` en el mini-server + `git push` |
+| Cambias el catálogo/seeder | `git push` + Toolkit → Artisan → `scout:import` una vez |
+| Cambias dependencias (`composer.json`) | Toolkit → Composer → **Update/Install** |
+| Cambias `.env` | Toolkit → Editar + Artisan → `optimize` |
+| Tareas programadas / cola | toggles del Toolkit (cola: ver §9 + fallback) |
+| Compilas estilos | `npm run build` en mini-server + `git push` |
+
+---
+
+## 🧰 Apéndice A — Método manual por SSH (fallback)
+
+Cuando el Toolkit no esté disponible o un control falle (p.ej. el toggle Cola). **Ejecuta como `cmurillo`,
+nunca como root.** Plantilla para correr cualquier artisan:
+
+```bash
+DOMAIN=lab138.littlebigpro.com
+ART=$(find /var/www/vhosts/*/$DOMAIN -maxdepth 2 -name artisan -type f 2>/dev/null | head -1)
+APP=$(dirname "$ART"); OWNER=$(stat -c '%U' "$ART")
+su -s /bin/bash - "$OWNER" -c "cd '$APP' && /opt/plesk/php/8.4/bin/php artisan <COMANDO>"
+```
+
+Primer arranque, reset de duplicados, prefijos Meili y activación de Redis (bloques copia-pega listos):
+ver **`docs/comandos-mantenimiento.md`**.
+
+> Truco anti-pega: los bloques largos `su -c "…"` se desformatean al pegar desde un chat → usa siempre
+> un **heredoc a `/tmp/script.sh`** (como en `comandos-mantenimiento.md`) o copia desde el botón de GitHub.
