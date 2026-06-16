@@ -71,10 +71,28 @@ git add -A && git commit -m "deploy" && git push origin main
 
 ---
 
-## 3. Despliegue por Git (Toolkit pestaña **Despliegue**, o Git)
+## 3. Despliegue por Git (Toolkit → pestaña **Despliegue**)
 
-- Conecta el repo (`https://github.com/Cris9870/test` o el tuyo), rama **`main`**, modo **automático**.
-- Las acciones de despliegue **SÍ corren en cada push** (deja las seguras de §10).
+Esta pestaña tiene los **pasos de despliegue integrados** (mucho mejor que el método manual):
+
+- **URL de Webhook**: cópiala y pégala en GitHub → repo → **Settings → Webhooks → Add webhook**
+  (Payload URL = la webhook, Content type `application/json`, evento *push*). Habilita el deploy en cada push.
+- **Modo**: **Automático** (deploy on push) o **Manual** (botón "Desplegar").
+- **Pasos de despliegue** (checkboxes) — configuración recomendada:
+  - ✅ 1 Activar mantenimiento · ✅ 2 Recuperar código · ✅ 3 Desplegar Git
+  - ✅ **4 Instalar dependencias `composer.json`** ← **el Toolkit corre `composer install` SOLO** (¡adiós al módulo manual!)
+  - ☐ **5 Instalar `package.json`** → **DESMÁRCALO** (los assets van precompilados; no compilamos en Plesk)
+  - ✅ **6 Ejecutar script de despliegue** → en **"Editar script"** pon los artisan recurrentes:
+    ```
+    php artisan migrate --force && php artisan scout:sync-index-settings && php artisan optimize
+    ```
+  - ✅ 7 Desactivar mantenimiento
+- ⚠️ En el script **NO** pongas `--seed`, `scout:import` ni `key:generate` (duplican el catálogo / rotan la clave). Esos son de **primer arranque** (§8).
+
+> 💡 **Corrección importante**: con la pestaña **Despliegue** del Toolkit, `composer install` **SÍ es
+> automático** (paso 4) y el "script de despliegue" (paso 6) hace de *deploy actions*, todo como `cmurillo`.
+> Esto reemplaza al **§7 (módulo Composer manual)** y al **§10 (acciones de Git crudas)**, que quedan solo
+> como alternativa si no usas el Toolkit.
 
 ---
 
