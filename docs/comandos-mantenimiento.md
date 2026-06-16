@@ -86,5 +86,42 @@ su -s /bin/bash - "$OWNER" -c "cd '$APP' && /opt/plesk/php/8.4/bin/php artisan o
 
 ---
 
+## 5. Activar Redis (caché) con prefijo + asegurar `APP_DEBUG=false`
+
+`phpredis` está disponible en el PHP de Plesk y el `redis-server` responde, así que **no hace falta
+Composer**. Esto pone la caché en Redis con prefijo `lab138_` (así no choca con otras apps en el
+mismo Redis), fija `APP_DEBUG=false` explícito, y comprueba que Redis funciona escribiendo y leyendo
+una clave (la verás namespaceada con `lab138_`).
+
+```bash
+ART=$(find /var/www/vhosts/*/lab138.littlebigpro.com -maxdepth 2 -name artisan -type f 2>/dev/null | head -1)
+APP=$(dirname "$ART"); OWNER=$(stat -c '%U' "$ART"); echo ">> APP=$APP OWNER=$OWNER"
+cat > /tmp/redis.sh <<'SCRIPT'
+set -e
+APP="$1"; PHP=/opt/plesk/php/8.4/bin/php
+cd "$APP"
+setenv() { if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi; }
+setenv APP_DEBUG false
+setenv REDIS_CLIENT phpredis
+setenv REDIS_HOST 127.0.0.1
+setenv REDIS_PORT 6379
+setenv REDIS_PREFIX lab138_
+setenv CACHE_STORE redis
+$PHP artisan optimize
+echo "--- prueba escribir/leer en Redis ---"
+$PHP artisan tinker --execute="Cache::put('redis_test_key','funciona',120); echo 'Cache::get => '.Cache::get('redis_test_key').PHP_EOL;"
+echo "--- claves en Redis con prefijo lab138_ ---"
+redis-cli -h 127.0.0.1 -p 6379 --scan --pattern 'lab138_*' | head -20
+echo "REDIS_OK"
+SCRIPT
+chmod a+rx /tmp/redis.sh
+su -s /bin/bash - "$OWNER" -c "bash /tmp/redis.sh '$APP'"
+```
+
+Esperado: `Cache::get => funciona` y al menos una clave `lab138_..._cache_redis_test_key` en el listado.
+(Nota: Laravel **ya namespacea Redis por `APP_NAME`** por defecto; el `REDIS_PREFIX` lo hace explícito.)
+
+---
+
 > ℹ️ Estos son comandos de **configuración puntual**. El despliegue de código del día a día es
 > **solo `git push`** (las deploy actions corren migrate + scout:sync + optimize solas).
