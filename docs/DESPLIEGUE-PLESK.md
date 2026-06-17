@@ -334,6 +334,50 @@ vistas `auth/login`, `auth/registro`, `cuenta`; rutas `registro` / `login` / `lo
 
 ---
 
+## 16. 🧪 Compilar EN Plesk (experimento — rama `experimento/plesk-build`, lab139)
+
+> Variante del playbook: en vez de versionar `public/build`, **Plesk compila los assets en el
+> server** durante el git-deploy. Útil cuando no quieres precompilar en el mini-server o quieres un
+> flujo tipo CI. Probado en `github.com/Cris9870/test4` → `https://lab139.littlebigpro.com`.
+>
+> ⚠️ Contrapartidas vs. el método por defecto: deploys más lentos (instala `node_modules` + build),
+> dependes de que el server tenga **Node** y **salida HTTPS** (el plugin `bunny()` baja las fuentes en
+> el build). Para producción estable, el método por defecto (precompilar y versionar) sigue siendo más simple.
+
+**Diferencias de repo** (ya hechas en la rama):
+- `public/build` **NO se versiona** (está en `.gitignore`) → la única fuente de assets es el build del server.
+- `package-lock.json` **sí se versiona** → `npm ci` reproducible.
+- `deploy/build.sh` resuelve el Node de Plesk (`/opt/plesk/node/<NN>/bin`), corre `npm ci --include=dev`
+  y `npm run build`.
+
+**Requisitos en el server**:
+- **Node ≥ 22** instalado (Plesk → **Node.js**, o el componente Node.js en *Tools & Settings → Updates*).
+  Vite 8 exige Node `>=20.19 || >=22.12`. El **dominio sigue en modo PHP-FPM** (Node *deshabilitado* para
+  el dominio): solo invocamos los binarios `node`/`npm`, no servimos con Node.
+- Salida HTTPS hacia `fonts.bunny.net` (igual que ya sale a Composer/Meili).
+
+**Pasos de despliegue (Toolkit → Despliegue)** — igual que §3 salvo:
+- ☐ **5 Instalar `package.json`** → **DÉJALO DESMARCADO**: el `npm ci` + flags los controlamos nosotros
+  en el script (para forzar devDependencies y elegir el Node correcto).
+- ✅ **6 Script de despliegue** → llama al build **antes** de `optimize`:
+  ```bash
+  bash deploy/build.sh && /opt/plesk/php/8.4/bin/php artisan migrate --force && /opt/plesk/php/8.4/bin/php artisan scout:sync-index-settings && /opt/plesk/php/8.4/bin/php artisan optimize
+  ```
+
+**Gotchas de compilar en Plesk**:
+| Síntoma | Causa | Arreglo |
+|---|---|---|
+| `vite: not found` / `tailwindcss: not found` en el build | `npm` omitió devDependencies (NODE_ENV=production) | `npm ci --include=dev` (ya en `build.sh`) |
+| `build.sh`: *"no hay Node en /opt/plesk/node"* | Node no instalado en el server | instala Node ≥22 (Plesk → Node.js) |
+| build falla bajando fuentes | el plugin `bunny()` no alcanza `fonts.bunny.net` | habilita salida HTTPS, o quita `bunny()` de `vite.config.js` |
+| Engine warning / build raro | Node < 20.19 | sube a Node 22 y vuelve a desplegar |
+| `/build/manifest.json` 404 tras deploy | el build no corrió (revisa el log del deploy) | confirma que el paso 6 ejecuta `deploy/build.sh` sin error |
+
+**Verificar**: `https://lab139.littlebigpro.com/build/manifest.json` → **200**, y `bash deploy/verify.sh
+https://lab139.littlebigpro.com`. Si el manifest sale 200 y la home renderiza con estilos, **Plesk compiló**. ✅
+
+---
+
 ## 🩺 Tabla de síntomas → causa → arreglo (lo que vivimos)
 
 | Síntoma | Causa | Arreglo |
