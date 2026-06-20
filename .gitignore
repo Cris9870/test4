@@ -14,11 +14,9 @@
 /.zed
 /auth.json
 /node_modules
-# EXPERIMENTO (rama experimento/plesk-build): Plesk SI compila.
-# public/build se IGNORA: la unica fuente de assets es `npm run build` corriendo
-# en el server durante el git-deploy (ver deploy/build.sh y DESPLIEGUE-PLESK.md §16).
-# En la rama main (playbook probado) ocurre lo contrario: se versiona public/build.
-/public/build
+# NO ignoramos /public/build a proposito: los assets se compilan en el
+# mini-server (npm run build) y se VERSIONAN para que Plesk los sirva sin Node.
+# /public/build
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
