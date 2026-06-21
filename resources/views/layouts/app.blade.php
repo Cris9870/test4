@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- b1-deploy-check:7f3a9c -->
     <title>@yield('title', config('app.name'))</title>
 
     {{-- Tailwind compilado por Vite en el mini-server (public/build) --}}
