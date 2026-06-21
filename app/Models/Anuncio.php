@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 use Laravel\Scout\Searchable;
 
 /**
@@ -33,6 +34,18 @@ class Anuncio extends Model
     protected $casts = [
         'presupuesto' => 'decimal:2',
     ];
+
+    /**
+     * Mantiene 'busqueda' = texto normalizado (sin acentos, minúsculas) para
+     * búsqueda insensible a tildes (Meili + fallback PG). Ver BuscadorAnuncios::fold().
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $anuncio): void {
+            $anuncio->busqueda = Str::of($anuncio->titulo . ' ' . $anuncio->descripcion . ' ' . $anuncio->categoria)
+                ->ascii()->lower()->squish()->value();
+        });
+    }
 
     // searchableAs() NO se sobreescribe a propósito: el default de Scout es
     // config('scout.prefix').$this->getTable() => el índice respeta SCOUT_PREFIX.
@@ -74,6 +87,8 @@ class Anuncio extends Model
             'titulo' => $this->titulo,
             'descripcion' => $this->descripcion,
             'categoria' => $this->categoria,
+            // Campo normalizado (sin acentos) para búsqueda insensible a tildes.
+            'busqueda' => $this->busqueda,
             'presupuesto' => (float) $this->presupuesto,
             'imagen_url' => $this->imagen_url,
             'ciudad' => $this->ciudad,

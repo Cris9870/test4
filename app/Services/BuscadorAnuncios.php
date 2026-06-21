@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Anuncio;
+use Illuminate\Support\Str;
 
 /**
  * Encapsula la búsqueda de Anuncios (solicitudes de compra) contra Meilisearch
@@ -28,9 +29,13 @@ class BuscadorAnuncios
 
     private function viaMeilisearch(string $q, string $categoria, int $limit): array
     {
+        // Normalizamos la query (sin acentos) para que matchee el campo 'busqueda'
+        // del índice => búsqueda insensible a tildes.
+        $qf = $this->fold($q);
+
         // 1) Hits filtrados por texto + categoria (lo que se muestra en el muro).
         //    Solo anuncios abiertos viven en el índice (shouldBeSearchable).
-        $hits = Anuncio::search($q, function ($index, string $query, array $options) use ($categoria, $limit) {
+        $hits = Anuncio::search($qf, function ($index, string $query, array $options) use ($categoria, $limit) {
             $options['limit'] = $limit;
             if ($categoria !== '') {
                 $options['filter'] = 'categoria = "' . str_replace('"', '\"', $categoria) . '"';
@@ -40,7 +45,7 @@ class BuscadorAnuncios
         })->raw();
 
         // 2) Distribución de facetas SIN el filtro de categoria (facetas disjuntas).
-        $facetas = Anuncio::search($q, function ($index, string $query, array $options) {
+        $facetas = Anuncio::search($qf, function ($index, string $query, array $options) {
             $options['limit'] = 0;
             $options['facets'] = ['categoria'];
 
@@ -61,13 +66,11 @@ class BuscadorAnuncios
 
     private function viaPostgres(string $q, string $categoria, string $error): array
     {
-        $aplicarTexto = function ($query) use ($q) {
-            if ($q !== '') {
-                $query->where(function ($w) use ($q) {
-                    $w->where('titulo', 'ilike', "%{$q}%")
-                        ->orWhere('descripcion', 'ilike', "%{$q}%")
-                        ->orWhere('categoria', 'ilike', "%{$q}%");
-                });
+        $qf = $this->fold($q);
+        $aplicarTexto = function ($query) use ($qf) {
+            if ($qf !== '') {
+                // 'busqueda' ya viene normalizado (sin acentos) => insensible a tildes.
+                $query->where('busqueda', 'ilike', "%{$qf}%");
             }
         };
 
@@ -96,5 +99,11 @@ class BuscadorAnuncios
             'fuente' => 'postgresql',
             'error' => $error,
         ];
+    }
+
+    /** Normaliza texto para búsqueda insensible a tildes: sin acentos, minúsculas. */
+    private function fold(string $s): string
+    {
+        return Str::of($s)->ascii()->lower()->squish()->value();
     }
 }

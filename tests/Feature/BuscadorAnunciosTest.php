@@ -49,6 +49,20 @@ class BuscadorAnunciosTest extends TestCase
         $this->assertSame(0, $vm['total']);
     }
 
+    public function test_busqueda_insensible_a_tildes(): void
+    {
+        $cat = Categoria::factory()->create(['nombre' => 'Hogar y muebles']);
+        Anuncio::factory()->create(['titulo' => 'Un sofá grande y cómodo', 'categoria' => 'Hogar y muebles', 'categoria_id' => $cat->id, 'estado' => 'abierto']);
+
+        // Sin tilde encuentra la palabra acentuada (fallback PG, normalizado).
+        $sinTilde = app(BuscadorAnuncios::class)->buscar('sofa');
+        $this->assertGreaterThan(0, $sinTilde['total']);
+
+        // Con tilde también.
+        $conTilde = app(BuscadorAnuncios::class)->buscar('sofá');
+        $this->assertGreaterThan(0, $conTilde['total']);
+    }
+
     public function test_anuncios_cerrados_no_aparecen_en_el_muro(): void
     {
         $cat = Categoria::factory()->create(['nombre' => 'Hogar y muebles']);

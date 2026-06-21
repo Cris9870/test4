@@ -142,8 +142,9 @@ return [
         'index-settings' => [
             // Estos ajustes se empujan a Meili con:  php artisan scout:sync-index-settings
             'anuncios' => [
-                // Atributos donde busca (orden = prioridad)
-                'searchableAttributes' => ['titulo', 'descripcion', 'categoria'],
+                // Atributos donde busca (orden = prioridad). 'busqueda' es el texto
+                // normalizado sin acentos => búsqueda insensible a tildes.
+                'searchableAttributes' => ['titulo', 'descripcion', 'categoria', 'busqueda'],
                 // Faceta por categoria (+ filtros por estado/ciudad/presupuesto)
                 'filterableAttributes' => ['categoria', 'presupuesto', 'estado', 'ciudad'],
                 'sortableAttributes' => ['presupuesto'],
