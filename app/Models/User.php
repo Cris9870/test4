@@ -7,10 +7,11 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'es_admin'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,6 +28,19 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'es_admin' => 'boolean',
         ];
+    }
+
+    /** Anuncios (solicitudes de compra) que el usuario publicó como comprador. */
+    public function anuncios(): HasMany
+    {
+        return $this->hasMany(Anuncio::class);
+    }
+
+    /** Ofertas que el usuario hizo como vendedor. */
+    public function ofertas(): HasMany
+    {
+        return $this->hasMany(Oferta::class);
     }
 }

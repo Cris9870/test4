@@ -10,13 +10,18 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * Seed the application's database (Reversa: categorías, usuarios, anuncios, ofertas).
      *
-     * Sin auth en este test: solo poblamos el catalogo.
-     * La indexacion a Meilisearch se hace aparte con `php artisan scout:import`.
+     * WithoutModelEvents evita indexar a Meilisearch durante el seed;
+     * la indexación se hace aparte con `php artisan scout:import 'App\Models\Anuncio'`.
      */
     public function run(): void
     {
-        $this->call(ProductoSeeder::class);
+        $this->call([
+            CategoriaSeeder::class,
+            UserSeeder::class,
+            AnuncioSeeder::class,
+            OfertaSeeder::class,
+        ]);
     }
 }

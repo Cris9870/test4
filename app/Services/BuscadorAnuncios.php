@@ -2,16 +2,17 @@
 
 namespace App\Services;
 
-use App\Models\Producto;
+use App\Models\Anuncio;
 
 /**
- * Encapsula la busqueda contra Meilisearch (via Scout) y devuelve un
- * "view-model" uniforme que consumen tanto la home como el endpoint htmx.
+ * Encapsula la búsqueda de Anuncios (solicitudes de compra) contra Meilisearch
+ * (vía Scout) y devuelve un "view-model" uniforme que consumen tanto la home
+ * como el endpoint htmx.
  *
- * Si Meilisearch falla, degrada a una busqueda en PostgreSQL (Eloquent)
- * para que la pagina no se caiga (tolerancia pedida en el enunciado).
+ * Si Meilisearch falla, degrada a una búsqueda en PostgreSQL (Eloquent) para
+ * que la página no se caiga (tolerancia a fallos por diseño).
  */
-class BuscadorProductos
+class BuscadorAnuncios
 {
     public function buscar(string $q, string $categoria = '', int $limit = 100): array
     {
@@ -27,20 +28,19 @@ class BuscadorProductos
 
     private function viaMeilisearch(string $q, string $categoria, int $limit): array
     {
-        // 1) Hits filtrados por texto + categoria (lo que se muestra en la grilla).
-        $hits = Producto::search($q, function ($index, string $query, array $options) use ($categoria, $limit) {
+        // 1) Hits filtrados por texto + categoria (lo que se muestra en el muro).
+        //    Solo anuncios abiertos viven en el índice (shouldBeSearchable).
+        $hits = Anuncio::search($q, function ($index, string $query, array $options) use ($categoria, $limit) {
             $options['limit'] = $limit;
             if ($categoria !== '') {
-                // Escapamos comillas para no romper la expresion de filtro de Meili
                 $options['filter'] = 'categoria = "' . str_replace('"', '\"', $categoria) . '"';
             }
 
             return $index->search($query, $options);
         })->raw();
 
-        // 2) Distribucion de facetas SIN el filtro de categoria, para que el usuario
-        //    pueda cambiar de faceta (facetas disjuntas). Solo cuenta, sin traer hits.
-        $facetas = Producto::search($q, function ($index, string $query, array $options) {
+        // 2) Distribución de facetas SIN el filtro de categoria (facetas disjuntas).
+        $facetas = Anuncio::search($q, function ($index, string $query, array $options) {
             $options['limit'] = 0;
             $options['facets'] = ['categoria'];
 
@@ -64,27 +64,27 @@ class BuscadorProductos
         $aplicarTexto = function ($query) use ($q) {
             if ($q !== '') {
                 $query->where(function ($w) use ($q) {
-                    $w->where('nombre', 'ilike', "%{$q}%")
+                    $w->where('titulo', 'ilike', "%{$q}%")
                         ->orWhere('descripcion', 'ilike', "%{$q}%")
                         ->orWhere('categoria', 'ilike', "%{$q}%");
                 });
             }
         };
 
-        // Conteo por categoria (ignorando el filtro de categoria, para poder cambiar de faceta)
-        $facetsQuery = Producto::query();
+        // Solo anuncios abiertos (igual que el índice de Meili).
+        $facetsQuery = Anuncio::query()->where('estado', 'abierto');
         $aplicarTexto($facetsQuery);
         $facets = $facetsQuery->selectRaw('categoria, count(*) as c')
             ->groupBy('categoria')
             ->pluck('c', 'categoria')
             ->toArray();
 
-        $itemsQuery = Producto::query();
+        $itemsQuery = Anuncio::query()->where('estado', 'abierto')->withCount('ofertas');
         $aplicarTexto($itemsQuery);
         if ($categoria !== '') {
             $itemsQuery->where('categoria', $categoria);
         }
-        $items = $itemsQuery->orderBy('nombre')->get();
+        $items = $itemsQuery->orderByDesc('created_at')->get();
 
         return [
             'items' => $items,

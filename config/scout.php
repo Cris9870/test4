@@ -141,12 +141,12 @@ return [
         'key' => env('MEILISEARCH_KEY'),
         'index-settings' => [
             // Estos ajustes se empujan a Meili con:  php artisan scout:sync-index-settings
-            'productos' => [
+            'anuncios' => [
                 // Atributos donde busca (orden = prioridad)
-                'searchableAttributes' => ['nombre', 'descripcion', 'categoria'],
-                // Faceta por categoria (+ rango por precio si se quisiera)
-                'filterableAttributes' => ['categoria', 'precio'],
-                'sortableAttributes' => ['precio'],
+                'searchableAttributes' => ['titulo', 'descripcion', 'categoria'],
+                // Faceta por categoria (+ filtros por estado/ciudad/presupuesto)
+                'filterableAttributes' => ['categoria', 'presupuesto', 'estado', 'ciudad'],
+                'sortableAttributes' => ['presupuesto'],
                 // Tolerancia a typos algo mas agresiva que el default (5/9)
                 'typoTolerance' => [
                     'enabled' => true,
@@ -155,20 +155,19 @@ return [
                         'twoTypos' => 8,
                     ],
                 ],
-                // Sinonimos: GARANTIZAN los ejemplos del enunciado aunque el typo
-                // cayera fuera del umbral. Meilisearch los aplica bidireccionalmente.
+                // Sinonimos: garantizan que un typo comun encuentre resultados aunque
+                // caiga fuera del umbral. Meilisearch los aplica bidireccionalmente.
                 'synonyms' => [
-                    'ipone' => ['iphone'],
-                    'iphon' => ['iphone'],
-                    'ifone' => ['iphone'],
-                    'labtop' => ['laptop'],
-                    'laptot' => ['laptop'],
-                    'portatil' => ['laptop'],
-                    'notebook' => ['laptop'],
-                    'celular' => ['smartphone', 'telefono'],
-                    'movil' => ['smartphone', 'telefono'],
+                    'bici' => ['bicicleta'],
+                    'bicicleta' => ['bici'],
+                    'licuadora' => ['batidora'],
                     'tele' => ['televisor', 'tv'],
-                    'audifonos' => ['auriculares'],
+                    'televisor' => ['tele', 'tv'],
+                    'nevera' => ['refrigeradora', 'refri'],
+                    'sofa' => ['sillon', 'mueble'],
+                    'lavadora' => ['lavarropas'],
+                    'consola' => ['playstation', 'xbox', 'nintendo'],
+                    'coche' => ['cochecito', 'carriola'],
                 ],
             ],
         ],

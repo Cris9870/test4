@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\BuscadorProductos;
+use App\Services\BuscadorAnuncios;
 use Illuminate\Http\Request;
 
 /**
@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
  */
 class BuscarController extends Controller
 {
-    public function __invoke(Request $request, BuscadorProductos $buscador)
+    public function __invoke(Request $request, BuscadorAnuncios $buscador)
     {
         $vm = $buscador->buscar(
             (string) $request->query('q', ''),

@@ -46,12 +46,12 @@ fi
 "$PHP" artisan migrate --force
 "$PHP" artisan scout:sync-index-settings
 
-# 5) Solo primer despliegue: siembra + reindexa (separado para NO duplicar productos)
+# 5) Solo primer despliegue: siembra + reindexa (separado para NO duplicar anuncios)
 if [ "${1:-}" = "--seed" ]; then
-  echo "Primer despliegue: sembrando y reindexando catalogo..."
+  echo "Primer despliegue: sembrando y reindexando anuncios..."
   "$PHP" artisan db:seed --force
-  "$PHP" artisan scout:flush 'App\Models\Producto'
-  "$PHP" artisan scout:import 'App\Models\Producto'
+  "$PHP" artisan scout:flush 'App\Models\Anuncio'
+  "$PHP" artisan scout:import 'App\Models\Anuncio'
 fi
 
 # 6) Cachear config/rutas/vistas (necesario tras tocar .env)

@@ -69,6 +69,12 @@ class AuthController extends Controller
 
     public function cuenta(Request $request)
     {
-        return view('cuenta', ['user' => $request->user()]);
+        $user = $request->user();
+
+        // Perfil: mis anuncios (con nº de ofertas) + mis ofertas (con su anuncio).
+        $misAnuncios = $user->anuncios()->withCount('ofertas')->latest()->get();
+        $misOfertas = $user->ofertas()->with('anuncio')->latest()->get();
+
+        return view('cuenta', compact('user', 'misAnuncios', 'misOfertas'));
     }
 }

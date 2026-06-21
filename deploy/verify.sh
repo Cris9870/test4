@@ -23,12 +23,12 @@ check() { # $1 descripcion  $2 path  $3 needle
 }
 
 echo "== Verificando $URL =="
-check "Home + PostgreSQL"          "/"                "PostgreSQL"
-check "Home + Meilisearch"         "/"                "available"
-check "Home con productos"         "/"                "/producto/"
-check "Busqueda typo ipone->iPhone" "/buscar?q=ipone"  "iPhone"
-check "Busqueda typo labtop->Laptop" "/buscar?q=labtop" "Laptop"
-check "Faceta categoria=Hogar"     "/buscar?categoria=Hogar" "/producto/"
-check "Detalle SSR (Alpine)"       "/producto/1"      "x-data"
+check "Home + PostgreSQL"            "/"                       "PostgreSQL"
+check "Home + Meilisearch"          "/"                       "available"
+check "Home con anuncios"           "/"                       "/anuncio/"
+check "Busqueda 'bici'"             "/buscar?q=bici"          "/anuncio/"
+check "Busqueda 'laptop'"           "/buscar?q=laptop"        "/anuncio/"
+check "Faceta categoria=Tecnologia" "/buscar?categoria=Tecnolog%C3%ADa" "/anuncio/"
+check "Detalle SSR de anuncio"      "/anuncio/1"              "S/"
 
 if [ "$fail" -eq 0 ]; then echo "== TODO OK =="; else echo "== HAY FALLOS =="; exit 1; fi

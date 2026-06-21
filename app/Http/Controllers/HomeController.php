@@ -2,18 +2,34 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Producto;
-use App\Services\BuscadorProductos;
+use App\Models\Anuncio;
+use App\Models\Categoria;
+use App\Services\BuscadorAnuncios;
 use Illuminate\Http\Request;
 use Meilisearch\Client;
 
 class HomeController extends Controller
 {
-    public function index(Request $request, BuscadorProductos $buscador)
+    public function index(Request $request, BuscadorAnuncios $buscador)
     {
-        // Render inicial (SSR) del catalogo completo via el mismo camino de busqueda.
-        $vm = $buscador->buscar('', '');
+        // Render inicial (SSR). El buscador del header envía ?q por GET (funciona en
+        // cualquier página); la home además trae el buscador htmx en vivo.
+        $vm = $buscador->buscar((string) $request->query('q', ''), '');
         $vm['estado'] = $this->estadoServicios();
+
+        return view('home', $vm);
+    }
+
+    /**
+     * Listado pre-filtrado por categoría (reusa el muro de la home).
+     */
+    public function categoria(string $slug, BuscadorAnuncios $buscador)
+    {
+        $categoria = Categoria::where('slug', $slug)->firstOrFail();
+
+        $vm = $buscador->buscar('', $categoria->nombre);
+        $vm['estado'] = $this->estadoServicios();
+        $vm['categoriaActiva'] = $categoria;
 
         return view('home', $vm);
     }
@@ -26,8 +42,8 @@ class HomeController extends Controller
     {
         // --- PostgreSQL: query REAL via Eloquent ---
         try {
-            $n = Producto::count();
-            $pg = ['ok' => true, 'detalle' => "{$n} productos en catalogo"];
+            $n = Anuncio::count();
+            $pg = ['ok' => true, 'detalle' => "{$n} anuncios publicados"];
         } catch (\Throwable $e) {
             $pg = ['ok' => false, 'detalle' => $this->corto($e->getMessage())];
         }
