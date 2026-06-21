@@ -24,7 +24,7 @@ check() { # $1 descripcion  $2 path  $3 needle
 
 echo "== Verificando $URL =="
 check "Home + PostgreSQL"            "/"                       "PostgreSQL"
-check "Home + Meilisearch"          "/"                       "available"
+check "Home + Meilisearch"          "/"                       "Meilisearch"
 check "Home con anuncios"           "/"                       "/anuncio/"
 check "Busqueda 'bici'"             "/buscar?q=bici"          "/anuncio/"
 check "Busqueda 'laptop'"           "/buscar?q=laptop"        "/anuncio/"
