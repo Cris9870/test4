@@ -23,7 +23,7 @@
 <div class="util">
     <div class="wrap">
         <div class="util-left">
-            <span class="invert"><span class="dot"></span>Al revés: <b>&nbsp;tú pones el precio, alguien te lo vende</b></span>
+            <span class="util-claim"><span class="dot"></span>Al revés: <b>&nbsp;tú pones el precio, alguien te lo vende</b></span>
         </div>
         <div class="util-right">
             <a href="{{ route('subir') }}">Subir imagen</a>
